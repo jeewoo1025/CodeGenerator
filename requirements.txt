@@ -16,3 +16,6 @@ accelerate
 groq
 matplotlib
 requests
+vllm
+transformers
+torch

@@ -1,981 +1,539 @@
-# CODESIM 리뷰 (NAACL 2025 Findings)
+# CodeGenerator
 
-## 📋 논문 컨텍스트
+CodeGenerator는 다양한 대규모 언어 모델(LLM)을 사용하여 코드 생성 성능을 평가하는 프레임워크입니다. OpenAI, Anthropic, Google, vLLM 등 다양한 모델을 지원하며, Direct, CoT, CodeSIM, MapCoder 등 다양한 프롬프팅 전략을 통해 코드 생성 성능을 평가할 수 있습니다.
 
-**CODESIM**은 NAACL 2025 Findings에서 제시된 혁신적인 multi-agent code generation 프레임워크입니다. 기존 MapCoder의 "multiple ungrounded exemplars" 접근법을 개선하여 **"single exemplar" 기반의 simulation-driven planning and debugging**을 구현했습니다.
+## 🚀 주요 기능
 
-### 🚀 핵심 혁신
-- **3-Agent Architecture**: Planning Agent, Coding Agent, Debugging Agent의 협력적 구조
-- **Simulation-Driven Verification**: Step-by-step 시뮬레이션을 통한 계획 검증
-- **Internal Debugging**: 외부 도구 없이 시뮬레이션 기반 내부 디버깅
-- **Human-like Perception**: 인간의 알고리즘 시각적 검증 방식 구현
+- **다양한 모델 지원**: OpenAI, Anthropic, Google, vLLM 등
+- **Qwen3 모델 지원**: Qwen3.5, Qwen3, Qwen3-Coder 계열 모델 (총 43개 모델)
+- **다양한 전략**: Direct, CoT, CodeSIM, MapCoder, SelfPlanning, Analogical 등
+- **다양한 데이터셋**: HumanEval, MBPP, LiveCodeBench, APPS, xCodeEval 등
+- **실시간 평가**: 코드 실행 및 테스트 자동화
+- **크로스 플랫폼**: Windows, Linux, macOS 지원
 
-### 📊 SOTA 성능 달성
-- **HumanEval**: 95.1% (Pass@1)
-- **MBPP**: 90.7% (Pass@1)  
-- **APPS**: 22% (Pass@1)
-- **CodeContests**: 29.1% (Pass@1)
+## 📦 설치
 
-## 🏗️ 아키텍처 다이어그램
+### 1. 기본 의존성 설치
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  Planning Agent │───▶│  Coding Agent   │───▶│ Debugging Agent │
-│                 │    │                 │    │                 │
-│ • Problem       │    │ • Plan → Code   │    │ • Internal      │
-│   Understanding │    │ • Execution     │    │   Simulation    │
-│ • Exemplar      │    │ • Generation    │    │ • Bug Detection │
-│   Recall        │    │                 │    │ • Code Fix      │
-│ • Algorithm     │    │                 │    │                 │
-│   Design        │    │                 │    │                 │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-         │                       │                       │
-         ▼                       ▼                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│ Plan Simulation │    │ Code Execution  │    │ Test Validation │
-│ & Verification  │    │ & Evaluation    │    │ & Refinement    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-```
-
-## 🔍 핵심 구현 분석
-
-### 1. 3-Agent 구조 구현
-
-#### Planning Agent (`CodeSIM.py` lines 200-280)
-```python
-# 핵심 계획 생성 로직
-input_for_planning = [
-    {
-        "role": "user", 
-        "content": prompt_for_planning.format(
-            problem=problem,
-            language=self.language,
-        )
-    },
-]
-
-# 계획 구조화
-if "### Plan" not in response:
-    plan = f"### Plan\n\n{response}"
-else:
-    plan = response[response.rfind("### Plan"):]
-```
-
-**구현 특징:**
-- **Problem Understanding**: 문제 유형 및 제약사항 분석
-- **Exemplar Recall**: 관련 예제 문제 회상 및 알고리즘 분석
-- **Algorithm Design**: 최적 알고리즘 선택 및 튜토리얼 제공
-- **Step-by-step Planning**: 상세한 실행 계획 수립
-
-#### Coding Agent (`CodeSIM.py` lines 320-350)
-```python
-# 계획 기반 코드 생성
-input_for_final_code_generation = [
-    {
-        "role": "user",
-        "content": prompt_for_code_generation.format(
-            problem_with_planning=problem_with_planning,
-            language=self.language,
-            std_input_prompt=std_input_prompt,
-        )
-    }
-]
-
-code = parse_response(response)
-```
-
-**구현 특징:**
-- **Plan-to-Code Translation**: 검증된 계획을 실행 가능한 코드로 변환
-- **Language-Specific Generation**: 프로그래밍 언어별 최적화된 코드 생성
-- **Standard I/O Handling**: 경쟁 프로그래밍 환경에 최적화된 입출력 처리
-
-#### Debugging Agent (`CodeSIM.py` lines 360-420)
-```python
-# 내부 디버깅 메커니즘
-for debug_no in range(1, self.max_debug_try + 1):
-    input_for_debugging = [
-        {
-            "role": "user",
-            "content": prompt_for_debugging.format(
-                problem_with_planning=problem_with_planning,
-                code=code,
-                language=self.language,
-                test_log=test_log,
-                std_input_prompt=std_input_prompt,
-            )
-        }
-    ]
-    
-    code = parse_response(response)
-    passed, test_log = self.check(data_row, additional_io, code)
-    
-    if passed:
-        break
-```
-
-**구현 특징:**
-- **Internal Simulation**: 외부 도구 없이 시뮬레이션 기반 버그 탐지
-- **Step-by-step Analysis**: 실패한 테스트 케이스의 단계별 분석
-- **Plan-Code Alignment**: 계획과 코드 간 불일치 점 검출
-- **Iterative Refinement**: 최대 5회까지 반복적 코드 개선
-
-### 2. Simulation-Driven 접근법 구현
-
-#### Plan Verification (`CodeSIM.py` lines 290-320)
-```python
-# 계획 시뮬레이션 및 검증
-input_for_simulation = [
-    {
-        "role": "user",
-        "content": prompt_for_simulation.format(
-            problem_with_planning=problem_with_planning,
-            language=self.language,
-        )
-    },
-]
-
-# 계획 수정 필요성 판단
-if "Plan Modification Needed" in response and \
-    "No Plan Modification Needed" not in response:
-    
-    # 계획 정제 단계
-    input_for_plan_refinement = [
-        {
-            "role": "user",
-            "content": prompt_for_plan_refinement.format(
-                problem_with_planning=problem_with_planning,
-                language=self.language,
-                critique=response
-            )
-        },
-    ]
-```
-
-**구현 특징:**
-- **Manual Simulation**: 코드 없이 수동으로 계획 단계별 실행
-- **Output Comparison**: 예상 출력과 실제 출력 비교 검증
-- **Plan Critique**: 시뮬레이션 결과 기반 계획 비판적 분석
-- **Iterative Refinement**: 최대 5회까지 계획 개선 반복
-
-#### Internal Debugging Simulation
-```python
-# 디버깅 프롬프트의 시뮬레이션 지시사항
-prompt_for_debugging = """
-### Simulation with failed test case
-To detect where is the bug follow following steps:
-    - Take a sample test case where it fails.
-    - Take the input go through each step according to the plan
-    - You will get a output that must be different from the expected output.
-
-### Debugging Notes
-- Based on this simulation detect any of the following cases:
-    - Plan is wrong
-    - Plan is correct but plan to code generation is wrong.
-- Finally, discuss how to correct this code.
-"""
-```
-
-**구현 특징:**
-- **Step-by-step Execution**: 실패한 테스트 케이스의 단계별 실행 시뮬레이션
-- **Plan-Code Mismatch Detection**: 계획과 코드 간 불일치 점 식별
-- **Root Cause Analysis**: 버그의 근본 원인 분석
-- **Corrective Action Planning**: 수정 방안 수립
-
-### 3. Multi-Agent 간 통신 및 데이터 흐름
-
-#### Agent 간 데이터 전달 구조
-```python
-# Planning → Coding → Debugging 데이터 흐름
-problem_with_planning = f"## Problem:\n{problem}\n\n{plan}"
-
-# 각 단계에서 이전 단계의 결과를 입력으로 활용
-input_for_final_code_generation = [
-    {
-        "role": "user",
-        "content": prompt_for_code_generation.format(
-            problem_with_planning=problem_with_planning,  # 계획 포함
-            language=self.language,
-            std_input_prompt=std_input_prompt,
-        )
-    }
-]
-
-input_for_debugging = [
-    {
-        "role": "user", 
-        "content": prompt_for_debugging.format(
-            problem_with_planning=problem_with_planning,  # 계획 + 코드
-            code=code,
-            language=self.language,
-            test_log=test_log,
-            std_input_prompt=std_input_prompt,
-        )
-    }
-]
-```
-
-#### 반복적 개선 메커니즘
-```python
-# Planning 반복 (최대 5회)
-for plan_no in range(1, self.max_plan_try + 1):
-    # ... planning logic ...
-    if passed:
-        break
-
-# Debugging 반복 (최대 5회)  
-for debug_no in range(1, self.max_debug_try + 1):
-    # ... debugging logic ...
-    if passed:
-        break
-```
-
-## 🧪 벤치마크 및 평가 시스템
-
-### ExecEval 연동 구현
-```python
-# 코드 실행 및 평가
-def check(self, data_row: dict, additional_io: List[str], code: str) -> bool:
-    passed_sample, test_log_sample = self.data.evaluate_sample_io(
-        data_row, code, self.language
-    )
-    
-    passed_additional, test_log_additional = self.data.evaluate_additional_io(
-        data_row[self.data.id_key], additional_io, code, self.language
-    )
-    
-    return passed_sample & passed_additional, test_log
-```
-
-### Pass@1 평가 메트릭
-```python
-# 결과 집계 및 요약
-gen_summary(RESULTS_PATH, SUMMARY_PATH)
-
-# ET/EP 데이터셋 생성
-if "human" in DATASET.lower():
-    generate_et_dataset_human(RESULTS_PATH, ET_RESULTS_PATH)
-    gen_summary(ET_RESULTS_PATH, ET_SUMMARY_PATH)
-```
-
-## 🔧 실행 가이드
-
-### 기본 실행 명령어
 ```bash
-# HumanEval 데이터셋으로 CodeSIM 실행
-python src/main.py --dataset HumanEval --strategy CodeSIM --model ChatGPT
-
-# MBPP 데이터셋으로 CodeSIM 실행  
-python src/main.py --dataset MBPP --strategy CodeSIM --model ChatGPT
-
-# APPS 데이터셋으로 CodeSIM 실행
-python src/main.py --dataset APPS --strategy CodeSIM --model ChatGPT
-
-# LiveCodeBench 데이터셋으로 CodeSIM 실행
-python src/main.py --dataset LiveCodeBench --strategy CodeSIM --model ChatGPT
+# 의존성 설치
+pip install -r requirements.txt
 ```
 
-## 🔄 Dataset 실행 내부 프로세스
+### 2. vLLM 설치 확인
 
-### 1. 데이터셋 로딩 및 초기화 과정
+vLLM이 제대로 설치되었는지 확인:
 
-#### Dataset Factory 패턴을 통한 동적 생성
-```python
-# src/main.py에서 데이터셋 생성
-if DATASET.lower() in ["livecodebench", "lcb"] or DATASET.startswith("lcb_"):
-    # LiveCodeBench 특별 처리
-    version = args.lcb_version
-    strategy = PromptingFactory.get_prompting_class(STRATEGY)(
-        model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(...),
-        data=DatasetFactory.create_dataset(DATASET, release_version=version),
-        language=LANGUAGE,
-        pass_at_k=PASS_AT_K,
-        results=Results(RESULTS_PATH),
-        verbose=VERBOSE
-    )
-else:
-    # 일반 데이터셋 처리
-    strategy = PromptingFactory.get_prompting_class(STRATEGY)(
-        model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(...),
-        data=DatasetFactory.create_dataset(DATASET),
-        language=LANGUAGE,
-        pass_at_k=PASS_AT_K,
-        results=Results(RESULTS_PATH),
-        verbose=VERBOSE
-    )
-```
-
-#### 데이터셋별 특화 처리
-```python
-# src/datasets/DatasetFactory.py
-class DatasetFactory:
-    @staticmethod
-    def create_dataset(dataset_name, **kwargs):
-        dataset_class = DatasetFactory.get_dataset_class(dataset_name)
-        
-        # LiveCodeBench: 버전별 릴리즈 지원
-        if dataset_name.lower() in ["livecodebench", "lcb"] or dataset_name.startswith("lcb_"):
-            if dataset_name.startswith("lcb_"):
-                version = dataset_name.replace("lcb_", "")
-            else:
-                version = kwargs.get('release_version', 'release_v6')
-            return dataset_class(release_version=version)
-        else:
-            return dataset_class(**kwargs)
-```
-
-### 2. 데이터셋 실행 워크플로우
-
-#### Step 1: 데이터 로딩 및 전처리
-```python
-# src/datasets/Dataset.py - 기본 데이터셋 클래스
-class Dataset(object):
-    def __init__(self, path: str):
-        self.path = path
-        self.data = None
-        self.id_key = ""
-        self.load()  # JSONL 파일에서 데이터 로드
-    
-    def load(self):
-        self.data = read_jsonl(self.path)  # JSONL 형식 데이터 파싱
-    
-    def __len__(self):
-        return len(self.data)  # 데이터셋 크기 반환
-    
-    def __getitem__(self, idx):
-        return self.data[idx]  # 인덱스 기반 데이터 접근
-```
-
-#### Step 2: 문제별 프롬프트 생성
-```python
-# src/datasets/HumanEvalDataset.py - HumanEval 특화 처리
-class HumanDataset(Dataset):
-    def __init__(self, path: str = HUMAN_DATA_PATH):
-        super().__init__(path)
-        self.id_key = "task_id"  # 고유 식별자 키 설정
-    
-    @staticmethod
-    def get_prompt(item):
-        # 프롬프트 또는 텍스트 필드에서 문제 설명 추출
-        if "prompt" in item:
-            return f"{item['prompt'].strip()}"
-        elif "text" in item:
-            return f"{item['text'].strip()}"
-        else:
-            raise Exception("No prompt or text in item")
-```
-
-#### Step 3: 코드 실행 및 평가
-```python
-# src/datasets/HumanEvalDataset.py - 평가 로직
-def evaluate_sample_io(self, item: dict, cur_imp: str, language: str):
-    # 샘플 I/O 테스트 실행
-    return evaluate_io(
-        sample_io=item["sample_io"],  # 테스트 케이스
-        completion=cur_imp,           # 생성된 코드
-    )
-
-def evaluate_additional_io(self, id: int, io: List[str], cur_imp: str, language: str):
-    # 추가 I/O 테스트 실행
-    if len(io) == 0:
-        return True, ""
-    
-    return evaluate_io(
-        sample_io=io,      # 추가 테스트 케이스
-        completion=cur_imp, # 생성된 코드
-    )
-```
-
-### 3. 실행 결과 저장 및 분석
-
-#### 결과 파일 구조
-```
-results/
-└── {DATASET}/                    # 데이터셋별 분류
-    └── {STRATEGY}/              # 전략별 분류
-        └── {MODEL_NAME}/        # 모델별 분류
-            └── {LANGUAGE}-{TEMPERATURE}-{TOP_P}-{PASS_AT_K}/
-                ├── Run-{run_no}/ # 실행 번호별 분류
-                │   ├── Results.jsonl          # 기본 실행 결과
-                │   ├── Summary.txt            # 통계 요약
-                │   ├── Log.txt                # 상세 실행 로그
-                │   ├── Results-ET.jsonl       # Execution Time 결과
-                │   ├── Results-EP.jsonl       # Execution Pass 결과
-                │   └── Results-LCB.jsonl      # LiveCodeBench 특화 결과
-```
-
-#### 실행 로그 및 모니터링
-```python
-# src/main.py - 실행 로그 관리
-if STORE_LOG_IN_FILE.lower() == 'yes':
-    sys.stdout = open(LOGS_PATH, mode="a", encoding="utf-8")
-
-# 실행 시작/종료 로그
-if CONTINUE == "no" and VERBOSE >= VERBOSE_MINIMAL:
-    print(f"""
-##################################################
-Experiment start {RUN_NAME}, Time: {datetime.now()}
-###################################################
-""")
-
-# 결과 요약 생성
-gen_summary(RESULTS_PATH, SUMMARY_PATH)
-```
-
-## 🎯 다른 Prompting 전략들의 구현 방식
-
-### 1. Chain-of-Thought (CoT) 전략
-
-#### 핵심 아이디어
-CoT는 **"Let's think step by step"** 접근법으로, 문제를 단계별로 분석하여 해결하는 방식입니다.
-
-#### 구현 구조 (`src/promptings/CoT.py`)
-```python
-class CoTStrategy(BaseStrategy):
-    def run_single_pass(self, data_row: dict):
-        # HumanEval 데이터셋 전용 프롬프트 템플릿
-        if type(self.data) == HumanDataset:
-            planning_prompt = """
-def encrypt(s):
-    '''
-    Create a function encrypt that takes a string as an argument and
-    returns a string encrypted with the alphabet being rotated. 
-    The alphabet should be rotated in a manner such that the letters 
-    shift down by two multiplied to two places.
-    For example:
-    encrypt('hi') returns 'lm'
-    encrypt('asdfghjkl') returns 'ewhjklnop'
-    encrypt('gf') returns 'kj'
-    encrypt('et') returns 'ix'
-    '''
-    # Let's think step by step.
-
-    # Define the alphabet as a string
-    d = 'abcdefghijklmnopqrstuvwxyz'
-    
-    # Initialize an empty string to store the encrypted result
-    out = ''
-    
-    # Iterate through each character in the input string
-    for c in s:
-        # Check if the character is a letter in the alphabet
-        if c in c:
-            # Find the index of the current letter in the alphabet
-            index = d.index(c)
-            
-            # Rotate the alphabet by two multiplied to two places
-            # Use modulo 26 to handle wrapping around the alphabet
-            rotated_index = (index + 2 * 2) % 26
-            
-            # Append the encrypted letter to the result string
-            out += d[rotated_index]
-        else:
-            # If the character is not a letter, append it unchanged
-            out += c
-    
-    # Return the final encrypted string
-    return out
-    """
-```
-
-**CoT의 특징:**
-- **Step-by-step Reasoning**: 각 단계를 명시적으로 설명
-- **Exemplar-based Learning**: 예제 문제와 해결 과정을 포함
-- **Direct Code Generation**: 사고 과정과 함께 코드를 직접 생성
-- **No Iteration**: 단일 패스로 해결 (반복 없음)
-
-### 2. MapCoder 전략
-
-#### 핵심 아이디어
-MapCoder는 **"multiple ungrounded exemplars"**를 사용하여 문제를 해결하는 방식으로, 여러 예제를 참고하여 매핑 기반으로 코드를 생성합니다.
-
-#### 구현 구조 (`src/promptings/MapCoder.py`)
-```python
-class MapCoder(BaseStrategy):
-    def __init__(self, k: int = 3, t: int = 5, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.k = k  # exemplar 개수
-        self.t = t  # 시도 횟수
-
-    def xml_to_dict(self, element):
-        # XML 응답을 딕셔너리로 파싱
-        result = {}
-        for child in element:
-            if child:
-                child_data = self.xml_to_dict(child)
-                if child.tag in result:
-                    if isinstance(result[child.tag], list):
-                        result[child.tag].append(child_data)
-                    else:
-                        result[child.tag] = [result[child.tag], child_data]
-                else:
-                    result[child.tag] = child_data
-            else:
-                result[child.tag] = child.text
-        return result
-
-    def parse_xml(self, response: str) -> dict:
-        # XML 응답 파싱 및 구조화
-        if '```xml' in response:
-            response = response.replace('```xml', '')
-        if '```' in response:
-            response = response.replace('```', '')
-
-        try:
-            root = ET.fromstring(response)
-        except:
-            try:
-                root = ET.fromstring('<root>\n' + response + '\n</root>')
-            except:
-                root = ET.fromstring('<root>\n' + response)
-        return self.xml_to_dict(root)
-```
-
-**MapCoder의 특징:**
-- **Multiple Exemplars**: k개의 예제를 동시에 참고
-- **XML-based Parsing**: 구조화된 응답을 XML로 파싱
-- **Iterative Refinement**: t번의 시도를 통한 점진적 개선
-- **No Simulation**: 계획 검증 없이 직접 코드 생성
-
-### 3. Self-Planning 전략
-
-#### 핵심 아이디어
-Self-Planning은 **"자기 계획 수립"**을 통해 문제를 해결하는 방식으로, LLM이 스스로 계획을 세우고 실행합니다.
-
-#### 구현 구조 (`src/promptings/SelfPlanning.py`)
-```python
-class SelfPlanningStrategy(BaseStrategy):
-    def run_single_pass(self, data_row: dict):
-        # HumanEval 데이터셋 전용 계획 프롬프트
-        if type(self.data) == HumanDataset:
-            planning_prompt = """
-def encrypt(s):
-    '''
-    Create a function encrypt that takes a string as an argument and returns a string encrypted with the alphabet being rotated. The alphabet should be rotated in a manner such that the letters shift down by two multiplied to two places.
-    For example:
-    encrypt('hi') returns 'lm'
-    encrypt('asdfghjkl') returns 'ewhjklnop'
-    encrypt('gf') returns 'kj'
-    encrypt('et') returns 'ix'
-    Let's think step by step.
-    1. Create a alphabet, bias two places multiplied by two.
-    2. Loop the input, find the latter bias letter in alphabet.
-    3. Return result.
-    ''' 
-
-def check_if_last_char_is_a_letter(txt):
-    ''' 
-    Create a function that returns True if the last character of a given string is an alphabetical character and is not a part of a word, and False otherwise. Note: 'word' is a group of characters separated by space.
-    Examples:
-    check_if_last_char_is_a_letter('apple pie') → False
-    check_if_last_char_is_a_letter('apple pi e') → True
-    check_if_last_char_is_a_letter('apple pi e ') → False
-    check_if_last_char_is_a_letter('') → False
-    Let's think step by step.
-    1. If the string is empty, return False.
-    2. If the string does not end with a alphabetical character, return False.
-    3. Split the given string into a list of words.
-    4. Check if the length of the last word is equal to 1.
-    '''
-    """
-```
-
-**Self-Planning의 특징:**
-- **Self-Generated Plans**: LLM이 스스로 계획을 수립
-- **Step-by-step Instructions**: 명확한 단계별 지시사항
-- **Exemplar Integration**: 예제와 계획을 통합하여 제공
-- **No External Validation**: 외부 검증 없이 자체 계획 실행
-
-### 4. Direct 전략
-
-#### 핵심 아이디어
-Direct는 **"직접적인 코드 생성"** 방식으로, 복잡한 프롬프트 없이 문제 설명만으로 코드를 생성합니다.
-
-#### 구현 구조 (`src/promptings/Direct.py`)
-```python
-class DirectStrategy(BaseStrategy):
-    def run_single_pass(self, data_row: dict):
-        # 가장 단순한 방식: 문제 설명만으로 코드 생성
-        prompt = self.data.get_prompt(data_row)
-        
-        # LLM에 직접 전달하여 코드 생성
-        response = self.gpt_chat([
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ])
-        
-        # 응답에서 코드 추출
-        code = parse_response(response)
-        return code
-```
-
-**Direct의 특징:**
-- **Minimal Prompting**: 최소한의 프롬프트만 사용
-- **No Planning**: 계획 수립 과정 없음
-- **No Exemplars**: 예제 참고 없음
-- **Fastest Execution**: 가장 빠른 실행 속도
-
-### 5. 전략별 성능 비교 및 선택 가이드
-
-#### 복잡도 vs 성능 트레이드오프
-```
-복잡도: Direct < CoT < SelfPlanning < MapCoder < CodeSIM
-성능:   Direct < CoT < SelfPlanning < MapCoder < CodeSIM
-속도:   Direct > CoT > SelfPlanning > MapCoder > CodeSIM
-```
-
-#### 데이터셋별 권장 전략
-- **HumanEval/MBPP**: CodeSIM (높은 정확도 요구)
-- **APPS/CodeContests**: CodeSIM 또는 MapCoder (복잡한 문제)
-- **LiveCodeBench**: CodeSIM (경쟁 프로그래밍 최적화)
-- **빠른 프로토타이핑**: Direct 또는 CoT
-- **균형잡힌 접근**: SelfPlanning
-
-#### 전략 선택 기준
-```python
-# src/main.py에서 전략 선택
-STRATEGY = args.strategy  # 사용자가 선택한 전략
-
-# 전략별 특성에 따른 자동 최적화
-if STRATEGY == "CodeSIM":
-    # 계획 검증 및 디버깅 활성화
-    max_plan_try = 5
-    max_debug_try = 5
-elif STRATEGY == "MapCoder":
-    # exemplar 기반 접근
-    k = 3  # exemplar 개수
-    t = 5  # 시도 횟수
-elif STRATEGY == "Direct":
-    # 단순한 직접 생성
-    # 추가 옵션 없음
-```
-
-### 고급 실행 옵션
 ```bash
-# 계획 시도 횟수 및 디버깅 시도 횟수 조정
-python src/main.py \
+python -c "import vllm; print('vLLM 설치 완료')"
+```
+
+### 3. CUDA 설정 확인
+
+```bash
+# CUDA 버전 확인
+nvidia-smi
+nvcc --version
+
+# PyTorch CUDA 지원 확인
+python -c "import torch; print(f'CUDA 사용 가능: {torch.cuda.is_available()}')"
+```
+
+## 🎯 사용법
+
+### 1. Qwen3 모델 평가 (vLLM) - 권장
+
+#### 기본 사용법
+```bash
+# Direct 전략으로 Qwen3-Coder-7B 평가
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-7B \
+    --dataset HumanEval \
+    --strategy Direct
+```
+
+#### CodeSIM 전략 사용
+```bash
+# CodeSIM 전략으로 평가 (코드 전용 모델 권장)
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-7B \
     --dataset HumanEval \
     --strategy CodeSIM \
-    --model ChatGPT \
-    --temperature 0 \
-    --top_p 0.95 \
-    --pass_at_k 1
+    --max_plan_try 5 \
+    --max_debug_try 5 \
+    --additional_info_run 0
 ```
 
-### 모델별 실행
+#### 다양한 전략 사용
 ```bash
-# Gemini 모델 사용
-python src/main.py --dataset HumanEval --strategy CodeSIM --model gemini-pro --model_provider Gemini
+# MapCoder 전략
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-14B \
+    --dataset HumanEval \
+    --strategy MapCoder
 
-# Groq 모델 사용
-python src/main.py --dataset HumanEval --strategy CodeSIM --model mixtral-8x7b-32768 --model_provider Groq
+    # CoT (Chain of Thought) 전략
+    python run_qwen_evaluation.py \
+        --model Qwen3-7B \
+        --dataset HumanEval \
+        --strategy CoT
 
-# Anthropic 모델 사용
-python src/main.py --dataset HumanEval --strategy CodeSIM --model claude-3-sonnet-20240229 --model_provider Anthropic
+    # SelfPlanning 전략
+    python run_qwen_evaluation.py \
+        --model Qwen3-14B \
+        --dataset HumanEval \
+        --strategy SelfPlanning
 ```
 
-## 📊 코드 구조 상세 분석
-
-### 핵심 클래스 구조
-```
-src/
-├── promptings/
-│   ├── CodeSIM.py              # 메인 CodeSIM 구현
-│   ├── variations/
-│   │   ├── CodeSIMWPVD.py     # With Plan Verification & Debugging
-│   │   ├── CodeSIMWD.py        # With Debugging
-│   │   ├── CodeSIMWPV.py       # With Plan Verification
-│   │   ├── CodeSIMA.py         # Analogical variation
-│   │   └── CodeSIMC.py         # Competitive programming
-│   ├── Base.py                 # 기본 전략 클래스
-│   └── PromptingFactory.py     # 전략 팩토리
-├── models/
-│   ├── ModelFactory.py         # 모델 팩토리
-│   ├── OpenAI.py               # OpenAI 모델 구현
-│   ├── Gemini.py               # Gemini 모델 구현
-│   └── Anthropic.py            # Anthropic 모델 구현
-├── datasets/
-│   ├── DatasetFactory.py       # 데이터셋 팩토리
-│   ├── HumanEvalDataset.py     # HumanEval 데이터셋
-│   ├── MBPPDataset.py          # MBPP 데이터셋
-│   ├── APPSDataset.py          # APPS 데이터셋
-│   └── LiveCodeBenchDataset.py # LiveCodeBench 데이터셋
-└── evaluations/
-    ├── func_evaluate.py         # 함수 평가 엔진
-    └── executor_utils.py        # 실행 유틸리티
+#### LiveCodeBench 데이터셋
+```bash
+# LiveCodeBench 데이터셋으로 평가
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-14B \
+    --dataset LiveCodeBench \
+    --strategy CodeSIM \
+    --temperature 0.1 \
+    --max_tokens 4096 \
+    --tensor_parallel_size 2
 ```
 
-### 주요 함수 분석
+### 2. 기존 main.py 사용
 
-#### 1. `run_single_pass()` - 메인 실행 로직
-```python
-def run_single_pass(self, data_row: dict):
-    # 1. 문제 분석 및 추가 I/O 수집
-    problem = self.data.get_prompt(data_row)
-    additional_io = []
-    
-    # 2. Planning Phase (최대 5회)
-    for plan_no in range(1, self.max_plan_try + 1):
-        # 계획 생성 → 시뮬레이션 검증 → 계획 정제
-        # 코드 생성 → 테스트 실행
-        
-        # 3. Debugging Phase (최대 5회)
-        for debug_no in range(1, self.max_debug_try + 1):
-            # 내부 시뮬레이션 → 버그 탐지 → 코드 수정
-            # 테스트 재실행
-            
-        if passed:
-            break
+```bash
+# vLLM으로 Qwen3-Coder-7B 평가
+python src/main.py \
+    --model Qwen3-Coder-7B \
+    --model_provider vllm \
+    --dataset HumanEval \
+    --strategy Direct \
+    --temperature 0 \
+    --top_p 0.95
+
+# CodeSIM 전략 사용
+python src/main.py \
+    --model Qwen3-Coder-7B \
+    --model_provider vllm \
+    --dataset HumanEval \
+    --strategy CodeSIM \
+    --temperature 0 \
+    --top_p 0.95
 ```
 
-#### 2. `check()` - 코드 검증 로직
-```python
-def check(self, data_row: dict, additional_io: List[str], code: str) -> bool:
-    # 샘플 I/O 평가
-    passed_sample, test_log_sample = self.data.evaluate_sample_io(
-        data_row, code, self.language
-    )
-    
-    # 추가 I/O 평가  
-    passed_additional, test_log_additional = self.data.evaluate_additional_io(
-        data_row[self.data.id_key], additional_io, code, self.language
-    )
-    
-    # 통합 결과 반환
-    return passed_sample & passed_additional, test_log
+### 3. 다른 모델들
+
+```bash
+# OpenAI GPT-4
+python src/main.py \
+    --model gpt-4 \
+    --model_provider OpenAI \
+    --dataset HumanEval \
+    --strategy Direct
+
+# Anthropic Claude-3-Sonnet
+python src/main.py \
+    --model claude-3-sonnet \
+    --model_provider anthropic \
+    --dataset HumanEval \
+    --strategy Direct
+
+# Google Gemini Pro
+python src/main.py \
+    --model gemini-pro \
+    --model_provider Google \
+    --dataset HumanEval \
+    --strategy Direct
 ```
 
-## 🚀 성능 최적화 구현
+## 🏗️ 지원 모델
 
-### 1. 경쟁 프로그래밍 최적화
-```python
-# APPS, CodeContest, XCode 데이터셋 최적화
-self.is_competitive = type(self.data) == APPSDataset or \
-    type(self.data) == CodeContestDataset or \
-    type(self.data) == XCodeDataset
+### Qwen3 계열 (vLLM)
 
-if self.is_competitive:
-    std_input_prompt = """
-    - Strictly follow the sample input and output format. 
-    - The input should be taken from Standard input and output should be given to standard output.
-    - For array input parse the array then pass it to the function.
-    - Do not add extra print statement otherwise it will failed the test cases.
-    """
+#### Qwen3.5 계열
+- `Qwen3.5-0.5B` - 0.5B 파라미터
+- `Qwen3.5-1.8B` - 1.8B 파라미터  
+- `Qwen3.5-4B` - 4B 파라미터
+- `Qwen3.5-7B` - 7B 파라미터
+- `Qwen3.5-14B` - 14B 파라미터
+- `Qwen3.5-32B` - 32B 파라미터
+- `Qwen3.5-72B` - 72B 파라미터
+
+#### Qwen3 계열
+- `Qwen3-0.5B` - 0.5B 파라미터
+- `Qwen3-1.5B` - 1.5B 파라미터
+- `Qwen3-3B` - 3B 파라미터
+- `Qwen3-7B` - 7B 파라미터
+- `Qwen3-14B` - 14B 파라미터
+- `Qwen3-32B` - 32B 파라미터
+- `Qwen3-72B` - 72B 파라미터
+
+#### Qwen3.5-MoE 계열
+- `Qwen3.5-MoE-2.7B` - 2.7B 파라미터
+- `Qwen3.5-MoE-3.5B` - 3.5B 파라미터
+- `Qwen3.5-MoE-6.5B` - 6.5B 파라미터
+- `Qwen3.5-MoE-12B` - 12B 파라미터
+- `Qwen3.5-MoE-20B` - 20B 파라미터
+- `Qwen3.5-MoE-32B` - 32B 파라미터
+
+#### 🆕 Qwen3-Coder 계열 (코드 전용 모델)
+- `Qwen3-Coder-0.5B` - 0.5B 파라미터
+- `Qwen3-Coder-1.5B` - 1.5B 파라미터
+- `Qwen3-Coder-3B` - 3B 파라미터
+- `Qwen3-Coder-7B` - 7B 파라미터
+- `Qwen3-Coder-14B` - 14B 파라미터
+- `Qwen3-Coder-32B` - 32B 파라미터
+- `Qwen3-Coder-72B` - 72B 파라미터
+
+#### Qwen3-Coder-MoE 계열
+- `Qwen3-Coder-MoE-2.7B` - 2.7B 파라미터
+- `Qwen3-Coder-MoE-3.5B` - 3.5B 파라미터
+- `Qwen3-Coder-MoE-6.5B` - 6.5B 파라미터
+- `Qwen3-Coder-MoE-12B` - 12B 파라미터
+- `Qwen3-Coder-MoE-20B` - 20B 파라미터
+- `Qwen3-Coder-MoE-32B` - 32B 파라미터
+
+### 기타 모델
+- **OpenAI**: GPT-3.5-turbo, GPT-4, GPT-4o, GPT-4o-mini 등
+- **Anthropic**: Claude-3-Haiku, Claude-3-Sonnet, Claude-3-Opus 등
+- **Google**: Gemini Pro, Gemini Flash, Gemini 1.5 Pro 등
+- **Groq**: Llama3-8B, Llama3-70B, Mixtral-8x7B 등
+
+## 🎭 지원 전략
+
+### 기본 전략
+- **Direct**: 직접 코드 생성 (가장 빠르고 효율적)
+- **CoT**: Chain of Thought (단계별 사고 과정)
+- **SelfPlanning**: 자체 계획 수립 및 실행
+
+### 고급 전략
+- **CodeSIM**: 코드 시뮬레이션, 계획 수립, 디버깅 (가장 정확함)
+- **MapCoder**: 맵핑 기반 코드 생성
+- **Analogical**: 유사 사례 기반 생성
+
+### CodeSIM 변형 전략
+- **CodeSIMWD**: CodeSIM with Debugging
+- **CodeSIMWPV**: CodeSIM with Planning and Validation
+- **CodeSIMWPVD**: CodeSIM with Planning, Validation and Debugging
+- **CodeSIMA**: CodeSIM Advanced
+- **CodeSIMC**: CodeSIM Compact
+
+## 📊 지원 데이터셋
+
+### 코드 생성 데이터셋
+- **HumanEval**: Python 함수 생성 (164문제)
+- **MBPP**: Python 프로그래밍 문제 (974문제)
+- **APPS**: 프로그래밍 문제 풀이 (10,000문제)
+
+### 실시간 실행 데이터셋
+- **LiveCodeBench**: 실시간 코드 실행 평가 (최신 v6 지원)
+- **xCodeEval**: 다양한 언어 코드 생성
+
+### 경쟁 프로그래밍
+- **CodeContest**: Google Code Jam 스타일 문제
+
+## 🔧 시스템 요구사항
+
+### GPU 메모리 요구사항
+
+| 모델 크기 | 최소 GPU 메모리 | 권장 GPU 메모리 | 권장 GPU |
+|-----------|----------------|----------------|----------|
+| 0.5B-1.8B | 4GB | 8GB | RTX 3060, RTX 4060 |
+| 4B-7B | 8GB | 16GB | RTX 3070, RTX 4070 |
+| 14B-32B | 16GB | 32GB | RTX 3090, RTX 4090 |
+| 72B | 32GB | 64GB+ | A100, H100 |
+
+### 권장 하드웨어
+
+- **GPU**: NVIDIA RTX 3090, RTX 4090, A100, H100
+- **RAM**: 32GB 이상 (72B 모델의 경우 64GB+)
+- **Storage**: SSD (모델 다운로드용, 최소 100GB 여유 공간)
+- **CPU**: 8코어 이상 (Intel i7/Ryzen 7 이상)
+
+### 소프트웨어 요구사항
+
+- **OS**: Windows 10/11, Ubuntu 18.04+, macOS 10.15+
+- **Python**: 3.8 이상 (3.9+ 권장)
+- **CUDA**: 11.8 이상 (12.0+ 권장)
+- **PyTorch**: 2.0 이상
+
+## 📁 프로젝트 구조
+
+```
+CodeGenerator/
+├── src/                          # 소스 코드
+│   ├── models/                   # 모델 구현
+│   │   ├── Base.py              # 기본 모델 클래스
+│   │   ├── OpenAI.py            # OpenAI 모델
+│   │   ├── Anthropic.py         # Anthropic 모델
+│   │   ├── VLLMModel.py         # vLLM 모델 (Qwen3 지원)
+│   │   ├── Gemini.py            # Google Gemini 모델
+│   │   └── ModelFactory.py      # 모델 팩토리
+│   ├── promptings/               # 프롬프팅 전략
+│   │   ├── Base.py              # 기본 전략 클래스
+│   │   ├── Direct.py            # Direct 전략
+│   │   ├── CodeSIM.py           # CodeSIM 전략
+│   │   ├── MapCoder.py          # MapCoder 전략
+│   │   └── PromptingFactory.py  # 전략 팩토리
+│   ├── datasets/                 # 데이터셋 로더
+│   │   ├── HumanEvalDataset.py  # HumanEval 데이터셋
+│   │   ├── LiveCodeBenchDataset.py # LiveCodeBench 데이터셋
+│   │   └── DatasetFactory.py    # 데이터셋 팩토리
+│   ├── evaluations/              # 평가 로직
+│   │   ├── func_evaluate.py     # 함수 평가
+│   │   └── resource_limit.py    # 리소스 제한
+│   ├── constants/                # 상수 정의
+│   │   ├── qwen_models.py       # Qwen3 모델 설정
+│   │   └── paths.py             # 경로 상수
+│   ├── utils/                    # 유틸리티 함수
+│   │   ├── summary.py           # 결과 요약
+│   │   └── parse.py             # 파싱 유틸리티
+│   ├── results/                  # 결과 처리
+│   │   └── Results.py           # 결과 클래스
+│   └── main.py                  # 메인 실행 스크립트
+├── data/                         # 데이터셋 파일들
+│   ├── HumanEval/               # HumanEval 데이터
+│   ├── MBPP/                    # MBPP 데이터
+│   ├── LiveCodeBench/           # LiveCodeBench 데이터
+│   └── APPS/                    # APPS 데이터
+├── results/                      # 평가 결과 (자동 생성)
+├── run_qwen_evaluation.py       # Qwen3 모델 평가 통합 스크립트
+├── test_setup.py                # 설정 테스트 스크립트
+├── requirements.txt              # Python 의존성
+└── README.md                     # 이 파일
 ```
 
-### 2. LiveCodeBench 전용 최적화
-```python
-# LiveCodeBench 데이터셋 감지
-def is_livecodebench(self) -> bool:
-    return self.dataset_type == 'livecodebench'
+## 🚀 빠른 시작
 
-# LiveCodeBench 전용 계획 프롬프트
-if self.is_livecodebench():
-    input_for_planning = [
-        {
-            "role": "user",
-            "content": f"""You are a competitive programming expert tasked with generating an appropriate plan to solve a given LiveCodeBench problem using the **{self.language}** programming language.
-            
-            ## Problem
-            {problem}
-            
-            **Expected Output:**
-            Your response must be structured as follows:
-            
-            ### Problem Understanding
-            - Think about the original problem. Develop an initial understanding about the problem.
-            - Identify the problem type (array, string, graph, dynamic programming, etc.)
-            - Note any constraints or edge cases
-            
-            ### Recall Example Problem
-            Recall a relevant and distinct competitive programming problem (different from problem mentioned above) and
-            - Describe it briefly
-            - Identify the algorithm category (greedy, DP, graph, etc.)
-            - Generate {self.language} code step by step to solve that problem
-            - Discuss the algorithm to solve this problem
-            - Finally generate a planning to solve that problem
-            
-            ### Algorithm to solve the original problem
-            - Write down the algorithm that is well suited for the original problem
-            - Give some tutorials about the algorithm for example:
-                - How to approach this type of algorithm
-                - Important things to consider
-                - Time and space complexity analysis
-            
-            ### Plan
-            - Write down a detailed, step-by-step plan to solve the **original problem**.
-            - Include edge case handling
-            - Consider optimization strategies
-            
-            --------
-            **Important Instruction:**
-            - Strictly follow the instructions.
-            - Do not generate code.
-            - Focus on competitive programming best practices."""
-        },
-    ]
+### 1. 설치 및 설정
+
+```bash
+# 저장소 클론
+git clone https://github.com/your-username/CodeGenerator.git
+cd CodeGenerator
+
+# 의존성 설치
+pip install -r requirements.txt
+
+# 설정 테스트
+python test_setup.py
 ```
 
-## 🔄 MapCoder와의 차이점
+### 2. 첫 번째 평가 실행
 
-### 1. Exemplar 접근법 차이
-- **MapCoder**: "multiple ungrounded exemplars" 사용
-- **CodeSIM**: "single exemplar" 기반 계획 생성
-
-### 2. 계획 검증 단계 추가
-```python
-# CodeSIM의 계획 검증 단계 (MapCoder에는 없음)
-input_for_simulation = [
-    {
-        "role": "user",
-        "content": prompt_for_simulation.format(
-            problem_with_planning=problem_with_planning,
-            language=self.language,
-        )
-    },
-]
-
-# 시뮬레이션 결과에 따른 계획 수정
-if "Plan Modification Needed" in response:
-    input_for_plan_refinement = [
-        {
-            "role": "user",
-            "content": prompt_for_plan_refinement.format(
-                problem_with_planning=problem_with_planning,
-                language=self.language,
-                critique=response
-            )
-        },
-    ]
+```bash
+# Qwen3-Coder-7B로 HumanEval 평가
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-7B \
+    --dataset HumanEval \
+    --strategy Direct
 ```
 
-### 3. 내부 디버깅 메커니즘
-```python
-# CodeSIM의 시뮬레이션 기반 내부 디버깅
-prompt_for_debugging = """
-### Simulation with failed test case
-To detect where is the bug follow following steps:
-    - Take a sample test case where it fails.
-    - Take the input go through each step according to the plan
-    - You will get a output that must be different from the expected output.
+### 3. 결과 확인
 
-### Debugging Notes
-- Based on this simulation detect any of the following cases:
-    - Plan is wrong
-    - Plan is correct but plan to code generation is wrong.
-- Finally, discuss how to correct this code.
-"""
+```bash
+# 결과 디렉토리 확인
+ls results/
+
+# 요약 파일 확인
+cat results/Qwen_Qwen3-Coder-7B_HumanEval_Direct_*/Summary.txt
 ```
 
-## 🌟 확장성 및 모델 연동
+## 🎯 고급 사용법
 
-### 1. 모델 팩토리 패턴
-```python
-class ModelFactory:
-    @staticmethod
-    def get_model_class(model_provider_name: str):
-        model_provider_name = model_provider_name.lower()
-        if model_provider_name == "gemini":
-            return Gemini
-        elif model_provider_name == "openai":
-            return OpenAIV1Model
-        elif model_provider_name == "openai-v2":
-            return OpenAIV2Model
-        elif model_provider_name == "groq":
-            return GroqModel
-        elif model_provider_name == "anthropic":
-            return AnthropicModel
+### 배치 평가
+
+여러 모델을 순차적으로 평가:
+
+```bash
+    # 여러 모델 평가
+    for model in "Qwen3-Coder-3B" "Qwen3-Coder-7B" "Qwen3-Coder-14B"; do
+    python run_qwen_evaluation.py \
+        --model $model \
+        --dataset HumanEval \
+        --strategy Direct
+done
 ```
 
-### 2. 전략 팩토리 패턴
-```python
-class PromptingFactory:
-    @staticmethod
-    def get_prompting_class(strategy_name: str):
-        if strategy_name == "CodeSIM":
-            return CodeSIM
-        elif strategy_name == "CodeSIMWPVD":
-            return CodeSIMWPVD
-        elif strategy_name == "CodeSIMWD":
-            return CodeSIMWD
-        elif strategy_name == "CodeSIMWPV":
-            return CodeSIMWPV
-        elif strategy_name == "CodeSIMA":
-            return CodeSIMA
-        elif strategy_name == "CodeSIMC":
-            return CodeSIMC
+### 다양한 전략 비교
+
+```bash
+# 같은 모델로 다른 전략 비교
+for strategy in "Direct" "CoT" "CodeSIM" "MapCoder"; do
+    python run_qwen_evaluation.py \
+        --model Qwen3-Coder-7B \
+        --dataset HumanEval \
+        --strategy $strategy
+done
 ```
 
-### 3. 데이터셋 팩토리 패턴
-```python
-class DatasetFactory:
-    @staticmethod
-    def create_dataset(dataset_name, **kwargs):
-        dataset_class = DatasetFactory.get_dataset_class(dataset_name)
-        
-        if dataset_name.lower() in ["livecodebench", "lcb"] or dataset_name.startswith("lcb_"):
-            if dataset_name.startswith("lcb_"):
-                version = dataset_name.replace("lcb_", "")
-            else:
-                version = kwargs.get('release_version', 'release_v6')
-            return dataset_class(release_version=version)
-        else:
-            return dataset_class(**kwargs)
+### 성능 최적화
+
+```bash
+# GPU 메모리 최적화
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-7B \
+    --dataset HumanEval \
+    --strategy Direct \
+    --gpu_memory_utilization 0.8 \
+    --max_tokens 1024
+
+# 다중 GPU 사용
+python run_qwen_evaluation.py \
+    --model Qwen3-Coder-14B \
+    --dataset HumanEval \
+    --strategy Direct \
+    --tensor_parallel_size 2
 ```
 
-## 📈 결과 분석 및 해석
+## 🔍 문제 해결
 
-### 1. 실행 결과 구조
+### 일반적인 문제들
+
+#### 1. GPU 메모리 부족
+```bash
+# GPU 메모리 사용률 조정
+--gpu_memory_utilization 0.7
+
+    # 더 작은 모델 사용
+    --model Qwen3-Coder-3B
+
+# 최대 토큰 수 줄이기
+--max_tokens 1024
+```
+
+#### 2. 모델 다운로드 실패
+```bash
+# Hugging Face 토큰 설정
+export HF_TOKEN=your_token_here
+
+# 네트워크 타임아웃 증가
+export HF_HUB_DOWNLOAD_TIMEOUT=1000
+```
+
+#### 3. vLLM 초기화 실패
+```bash
+# CUDA 버전 확인
+nvidia-smi
+nvcc --version
+
+# vLLM 재설치
+pip uninstall vllm
+pip install vllm
+
+# PyTorch 재설치
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+```
+
+#### 4. CodeSIM 실행 오류
+```bash
+# 더 작은 배치 크기
+--max_tokens 1024
+
+# 메모리 사용량 줄이기
+--gpu_memory_utilization 0.7
+```
+
+### 성능 최적화 팁
+
+#### 1. 모델 선택 가이드
+- **일반 용도**: Qwen3-7B (균형잡힌 성능)
+- **코드 생성**: Qwen3-Coder-7B (최적화된 성능)
+- **제한된 리소스**: Qwen3-Coder-3B (8GB GPU)
+- **최고 성능**: Qwen3-Coder-14B (16GB+ GPU)
+
+#### 2. 전략 선택 가이드
+- **빠른 평가**: Direct (가장 빠름)
+- **정확한 평가**: CodeSIM (가장 정확함)
+- **균형잡힌**: CoT (속도와 정확도 균형)
+- **고급 분석**: MapCoder (복잡한 문제)
+
+#### 3. 하드웨어 최적화
+- **단일 GPU**: tensor_parallel_size=1
+- **다중 GPU**: tensor_parallel_size=2 (또는 4)
+- **메모리 최적화**: gpu_memory_utilization=0.8
+- **배치 처리**: max_tokens=2048
+
+## 📊 결과 분석
+
+### 결과 파일 구조
+
 ```
 results/
-└── {DATASET}/
-    └── {STRATEGY}/
-        └── {MODEL_NAME}/
-            └── {LANGUAGE}-{TEMPERATURE}-{TOP_P}-{PASS_AT_K}/
-                ├── Run-{run_no}/
-                │   ├── Results.jsonl          # 기본 결과
-                │   ├── Summary.txt            # 요약 통계
-                │   ├── Log.txt                # 실행 로그
-                │   ├── Results-ET.jsonl       # ET 평가 결과
-                │   ├── Summary-ET.txt         # ET 요약
-                │   ├── Results-EP.jsonl       # EP 평가 결과
-                │   ├── Summary-EP.txt         # EP 요약
-                │   ├── Results-LCB.jsonl      # LiveCodeBench 결과
-                │   ├── Summary-LCB.txt        # LiveCodeBench 요약
-                │   └── Report-LCB.json        # LiveCodeBench 상세 리포트
+└── Qwen_Qwen3-Coder-7B_HumanEval_Direct_20241201_143022/
+    ├── Results.jsonl          # 상세 평가 결과
+    ├── Summary.txt            # 결과 요약
+    ├── Log.txt               # 실행 로그
+    ├── Results-ET.jsonl      # Execution Time 결과
+    └── Summary-ET.txt        # Execution Time 요약
 ```
 
-### 2. 성능 지표 해석
-- **Pass@1**: 첫 번째 시도에서 통과한 문제 비율
-- **ET (Execution Time)**: 코드 실행 시간 분석
-- **EP (Execution Pass)**: 실행 통과율 분석
-- **LCB (LiveCodeBench)**: 경쟁 프로그래밍 특화 평가
+### 결과 해석
 
-## 🔮 향후 발전 방향
+#### Pass@k 지표
+- **Pass@1**: 첫 번째 시도에서 통과한 비율
+- **Pass@10**: 10번 시도 중 통과한 비율
+- **Pass@100**: 100번 시도 중 통과한 비율
 
-### 1. 모델 확장
-- **o3-mini**: Ollama 기반 로컬 모델 연동
-- **GPT-4o**: 최신 OpenAI 모델 지원
-- **Claude 3.5 Sonnet**: Anthropic 최신 모델 지원
+#### 실행 시간 분석
+- **평균 실행 시간**: 모든 테스트 케이스의 평균
+- **최대 실행 시간**: 가장 오래 걸린 테스트 케이스
+- **메모리 사용량**: GPU 및 시스템 메모리 사용량
 
-### 2. 전략 확장
-- **CodeSIM+**: 강화학습 기반 에이전트 협력 최적화
-- **CodeSIM-Multi**: 다중 언어 동시 생성 지원
-- **CodeSIM-Adaptive**: 문제 유형별 자동 전략 선택
+## 🔮 향후 계획
 
-### 3. 평가 시스템 확장
-- **Code Quality Metrics**: 코드 품질 지표 추가
-- **Runtime Performance**: 실행 시간 성능 분석
-- **Memory Usage**: 메모리 사용량 분석
+### 단기 계획 (1-3개월)
+- [ ] 더 많은 Qwen3 모델 지원
+- [ ] 새로운 프롬프팅 전략 추가
+- [ ] 성능 벤치마크 개선
+
+### 중기 계획 (3-6개월)
+- [ ] 웹 인터페이스 개발
+- [ ] 분산 평가 시스템 구축
+- [ ] 실시간 모니터링 대시보드
+
+### 장기 계획 (6개월+)
+- [ ] 클라우드 배포 지원
+- [ ] 자동 하이퍼파라미터 튜닝
+- [ ] 멀티 모달 평가 지원
+
+## 🤝 기여하기
+
+### 버그 리포트
+- GitHub Issues를 통해 버그를 리포트해주세요
+- 재현 가능한 최소한의 예제를 포함해주세요
+
+### 기능 제안
+- 새로운 기능이나 개선사항을 제안해주세요
+- 구체적인 사용 사례를 설명해주세요
+
+### 코드 기여
+- Fork 후 Pull Request를 보내주세요
+- 코드 스타일 가이드를 따라주세요
 
 ## 📚 참고 자료
 
-- **논문**: CODESIM: Multi-Agent Code Generation with Simulation-Driven Planning and Debugging (NAACL 2025 Findings)
-- **코드베이스**: [GitHub Repository](https://github.com/your-repo/codesim)
-- **데이터셋**: HumanEval, MBPP, APPS, CodeContests, LiveCodeBench
-- **평가 프레임워크**: ExecEval, Pass@k metrics
+### 공식 문서
+- [vLLM 공식 문서](https://docs.vllm.ai/)
+- [Qwen 모델 허브](https://huggingface.co/Qwen)
+- [Qwen3-Coder GitHub](https://github.com/QwenLM/Qwen3-Coder)
+
+### 관련 논문
+- [Qwen3 Technical Report](https://arxiv.org/abs/2505.09388)
+- [Qwen2.5-Coder Technical Report](https://arxiv.org/abs/2409.12186)
+
+### 커뮤니티
+- [Qwen Discord](https://discord.gg/qwen)
+- [Hugging Face Forums](https://discuss.huggingface.co/)
+
+## 📄 라이선스
+
+이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
+
+## 🙏 감사의 말
+
+- [Qwen Team](https://github.com/QwenLM) - 훌륭한 모델들을 제공해주셔서 감사합니다
+- [vLLM Team](https://github.com/vllm-project/vllm) - 고성능 추론 엔진을 제공해주셔서 감사합니다
+- [Hugging Face](https://huggingface.co/) - 모델 허브와 도구들을 제공해주셔서 감사합니다
 
 ---
 
-**Note**: 이 README는 CODESIM 프레임워크의 실제 구현 코드를 기반으로 작성되었으며, 논문에서 제시한 이론적 개념들이 어떻게 실제로 구현되었는지 상세히 분석하고 있습니다.
+**CodeGenerator**로 더 나은 코드 생성 AI를 만들어가요! 🚀✨

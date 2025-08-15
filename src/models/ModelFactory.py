@@ -2,6 +2,7 @@ from models.Anthropic import *
 from models.Gemini import *
 from models.OpenAI import *
 from models.GroqModel import *
+from models.VLLMModel import *
 
 class ModelFactory:
     @staticmethod
@@ -17,5 +18,7 @@ class ModelFactory:
             return GroqModel
         elif model_provider_name == "anthropic":
             return AnthropicModel
+        elif model_provider_name == "vllm":
+            return VLLMModel
         else:
             raise Exception(f"Unknown model provider name {model_provider_name}")

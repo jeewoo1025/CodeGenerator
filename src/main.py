@@ -217,8 +217,8 @@ if DATASET.lower() in ["livecodebench", "lcb"] or DATASET.startswith("lcb_"):
     
     strategy = PromptingFactory.get_prompting_class(STRATEGY)(
         model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(
-            model_name=MODEL_NAME, 
-            temperature=TEMPERATURE, 
+            model_name=MODEL_NAME,
+            temperature=TEMPERATURE,
             top_p=TOP_P
         ),
         data=DatasetFactory.create_dataset(DATASET, release_version=version),
@@ -230,8 +230,8 @@ if DATASET.lower() in ["livecodebench", "lcb"] or DATASET.startswith("lcb_"):
 else:
     strategy = PromptingFactory.get_prompting_class(STRATEGY)(
         model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(
-            model_name=MODEL_NAME, 
-            temperature=TEMPERATURE, 
+            model_name=MODEL_NAME,
+            temperature=TEMPERATURE,
             top_p=TOP_P
         ),
         data=DatasetFactory.create_dataset(DATASET),

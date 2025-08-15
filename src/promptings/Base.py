@@ -74,11 +74,13 @@ class BaseStrategy(object):
             presence_penalty=0
         ):
         
+        # 모든 모델과 호환되는 통합 처리
         response, run_details = self.model.prompt(
             processed_input=processed_input, 
             frequency_penalty=frequency_penalty, 
             presence_penalty=presence_penalty
         )
+        
         self.append_run_details(run_details)
         
         return response
