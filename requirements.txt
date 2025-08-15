@@ -3,7 +3,7 @@ openai
 numpy
 pandas
 python-dotenv
-pyyml
+pyyaml
 tenacity
 tiktoken
 tqdm

@@ -45,9 +45,9 @@ python -c "import torch; print(f'CUDA 사용 가능: {torch.cuda.is_available()}
 
 #### 기본 사용법
 ```bash
-# Direct 전략으로 Qwen3-Coder-7B 평가
+# Direct 전략으로 Qwen3-0.6B 평가
 python run_qwen_evaluation.py \
-    --model Qwen3-Coder-7B \
+    --model Qwen3-0.6B \
     --dataset HumanEval \
     --strategy Direct
 ```
@@ -56,7 +56,7 @@ python run_qwen_evaluation.py \
 ```bash
 # CodeSIM 전략으로 평가 (코드 전용 모델 권장)
 python run_qwen_evaluation.py \
-    --model Qwen3-Coder-7B \
+    --model Qwen3-0.6B \
     --dataset HumanEval \
     --strategy CodeSIM \
     --max_plan_try 5 \
@@ -68,19 +68,19 @@ python run_qwen_evaluation.py \
 ```bash
 # MapCoder 전략
 python run_qwen_evaluation.py \
-    --model Qwen3-Coder-14B \
+    --model Qwen3-0.6B \
     --dataset HumanEval \
     --strategy MapCoder
 
     # CoT (Chain of Thought) 전략
     python run_qwen_evaluation.py \
-        --model Qwen3-7B \
+        --model Qwen3-0.6B \
         --dataset HumanEval \
         --strategy CoT
 
     # SelfPlanning 전략
     python run_qwen_evaluation.py \
-        --model Qwen3-14B \
+        --model Qwen3-0.6B \
         --dataset HumanEval \
         --strategy SelfPlanning
 ```
@@ -89,7 +89,7 @@ python run_qwen_evaluation.py \
 ```bash
 # LiveCodeBench 데이터셋으로 평가
 python run_qwen_evaluation.py \
-    --model Qwen3-Coder-14B \
+    --model Qwen3-0.6B \
     --dataset LiveCodeBench \
     --strategy CodeSIM \
     --temperature 0.1 \
@@ -100,9 +100,9 @@ python run_qwen_evaluation.py \
 ### 2. 기존 main.py 사용
 
 ```bash
-# vLLM으로 Qwen3-Coder-7B 평가
+# vLLM으로 Qwen3-0.6B 평가
 python src/main.py \
-    --model Qwen3-Coder-7B \
+    --model Qwen3-0.6B \
     --model_provider vllm \
     --dataset HumanEval \
     --strategy Direct \
@@ -111,7 +111,7 @@ python src/main.py \
 
 # CodeSIM 전략 사용
 python src/main.py \
-    --model Qwen3-Coder-7B \
+    --model Qwen3-0.6B \
     --model_provider vllm \
     --dataset HumanEval \
     --strategy CodeSIM \
@@ -146,8 +146,22 @@ python src/main.py \
 
 ## 🏗️ 지원 모델
 
-### Qwen3 계열 (vLLM) 
-TBD
+### Qwen3 계열 (vLLM)
+아래 모델명은 실제 지원되는 모델명과 일치해야 하며, `src/constants/qwen_models.py` 기준입니다.
+
+#### Qwen3 시리즈
+- Qwen3-0.6B
+- Qwen3-1.7B
+- Qwen3-4B
+- Qwen3-8B
+- Qwen3-14B
+- Qwen3-32B
+- Qwen3-30B-A3B (MoE)
+- Qwen3-235B-A22B (MoE)
+
+#### Qwen3-Coder 시리즈
+- Qwen3-Coder-30B-A3B-Instruct (MoE, 코드 특화)
+- Qwen3-Coder-480B-A35B-Instruct (MoE, 코드 특화)
 
 ### 기타 모델
 - **OpenAI**: GPT-3.5-turbo, GPT-4, GPT-4o, GPT-4o-mini 등
@@ -157,7 +171,7 @@ TBD
 
 ## 🎭 지원 전략
 
-### Approaches
+### 지원 프롬프팅 전략
 - **Direct**: 직접 코드 생성 (가장 빠르고 효율적)
 - **CoT**: Chain of Thought (단계별 사고 과정)
 - **SelfPlanning**: 자체 계획 수립 및 실행
@@ -165,7 +179,7 @@ TBD
 - **MapCoder**: 맵핑 기반 코드 생성
 - **Analogical**: 유사 사례 기반 생성
 
-### CodeSIM 변형 전략
+#### CodeSIM 변형 전략
 - **CodeSIMWD**: CodeSIM with Debugging
 - **CodeSIMWPV**: CodeSIM with Planning and Validation
 - **CodeSIMWPVD**: CodeSIM with Planning, Validation and Debugging
@@ -174,50 +188,50 @@ TBD
 
 ## 📊 지원 데이터셋
 
-### 코드 생성 데이터셋
-- **HumanEval**: Python 함수 생성 
-- **MBPP**: Python 프로그래밍 문제
-- **APPS**: 프로그래밍 문제 풀이
 
-### 실시간 실행 데이터셋
-- **LiveCodeBench**: 실시간 코드 실행 평가 (최신 v6 지원)
-- **xCodeEval**: 다양한 언어 코드 생성 (Python, C, C++)
+### 1. Qwen3 모델 평가 (vLLM) - 권장
 
-### 경쟁 프로그래밍
-- **CodeContest**: Google Code Jam 스타일 문제
-
-## 🔧 시스템 요구사항
-
-### GPU 메모리 요구사항
-
-| 모델 크기 | 최소 GPU 메모리 | 권장 GPU 메모리 | 권장 GPU |
-|-----------|----------------|----------------|----------|
-| 0.5B-1.8B | 4GB | 8GB | RTX 3060, RTX 4060 |
-| 4B-7B | 8GB | 16GB | RTX 3070, RTX 4070 |
-| 14B-32B | 16GB | 32GB | RTX 3090, RTX 4090 |
-| 72B | 32GB | 64GB+ | A100, H100 |
-
-### 권장 하드웨어
-
-- **GPU**: NVIDIA RTX 3090, RTX 4090, A100, H100
-- **RAM**: 32GB 이상 (72B 모델의 경우 64GB+)
-- **Storage**: SSD (모델 다운로드용, 최소 100GB 여유 공간)
-- **CPU**: 8코어 이상 (Intel i7/Ryzen 7 이상)
-
-### 소프트웨어 요구사항
-
-- **OS**: Windows 10/11, Ubuntu 18.04+, macOS 10.15+
-- **Python**: 3.8 이상 (3.9+ 권장)
-- **CUDA**: 11.8 이상 (12.0+ 권장)
-- **PyTorch**: 2.0 이상
-
-## 📁 프로젝트 구조
-
+#### 기본 사용법
+```bash
+# Direct 전략으로 Qwen3-0.6B 평가
+python run_qwen_evaluation.py \
+    --model Qwen3-0.6B \
+    --dataset HumanEval \
+    --strategy Direct
 ```
-CodeGenerator/
-├── src/                          # 소스 코드
-│   ├── models/                   # 모델 구현
-│   │   ├── Base.py              # 기본 모델 클래스
+
+#### CodeSIM 전략 사용
+```bash
+# CodeSIM 전략으로 평가 
+python run_qwen_evaluation.py \
+    --model Qwen3-0.6B \
+    --dataset HumanEval \
+    --strategy CodeSIM \
+    --max_plan_try 5 \
+    --max_debug_try 5 \
+    --additional_info_run 0
+```
+
+#### 다양한 전략 사용
+```bash
+# MapCoder 전략
+python run_qwen_evaluation.py \
+    --model Qwen3-0.6B \
+    --dataset HumanEval \
+    --strategy MapCoder
+
+# CoT (Chain of Thought) 전략
+python run_qwen_evaluation.py \
+    --model Qwen3-0.6B \
+    --dataset HumanEval \
+    --strategy CoT
+
+# SelfPlanning 전략
+python run_qwen_evaluation.py \
+    --model Qwen3-0.6B \
+    --dataset HumanEval \
+    --strategy SelfPlanning
+```
 │   │   ├── OpenAI.py            # OpenAI 모델
 │   │   ├── Anthropic.py         # Anthropic 모델
 │   │   ├── VLLMModel.py         # vLLM 모델 (Qwen3 지원)
@@ -276,9 +290,9 @@ python test_setup.py
 ### 2. 첫 번째 평가 실행
 
 ```bash
-# Qwen3-Coder-7B로 HumanEval 평가
+# Qwen3-0.6B로 HumanEval 평가
 python run_qwen_evaluation.py \
-    --model Qwen3-Coder-7B \
+    --model Qwen3-0.6B \
     --dataset HumanEval \
     --strategy Direct
 ```
@@ -290,7 +304,7 @@ python run_qwen_evaluation.py \
 ls results/
 
 # 요약 파일 확인
-cat results/Qwen_Qwen3-Coder-7B_HumanEval_Direct_*/Summary.txt
+cat results/Qwen3-0.6B_HumanEval_Direct_*/Summary.txt
 ```
 
 ## 🎯 고급 사용법
@@ -300,8 +314,8 @@ cat results/Qwen_Qwen3-Coder-7B_HumanEval_Direct_*/Summary.txt
 여러 모델을 순차적으로 평가:
 
 ```bash
-    # 여러 모델 평가
-    for model in "Qwen3-Coder-3B" "Qwen3-Coder-7B" "Qwen3-Coder-14B"; do
+# 여러 모델 평가
+for model in "Qwen3-8B" "Qwen3-14B" "Qwen3-32B"; do
     python run_qwen_evaluation.py \
         --model $model \
         --dataset HumanEval \
@@ -350,7 +364,7 @@ python run_qwen_evaluation.py \
 --gpu_memory_utilization 0.7
 
     # 더 작은 모델 사용
-    --model Qwen3-Coder-3B
+    --model Qwen3-0.6B
 
 # 최대 토큰 수 줄이기
 --max_tokens 1024
@@ -388,26 +402,6 @@ pip install torch torchvision torchaudio --index-url https://download.pytorch.or
 --gpu_memory_utilization 0.7
 ```
 
-### 성능 최적화 팁
-
-#### 1. 모델 선택 가이드
-- **일반 용도**: Qwen3-7B (균형잡힌 성능)
-- **코드 생성**: Qwen3-Coder-7B (최적화된 성능)
-- **제한된 리소스**: Qwen3-Coder-3B (8GB GPU)
-- **최고 성능**: Qwen3-Coder-14B (16GB+ GPU)
-
-#### 2. 전략 선택 가이드
-- **빠른 평가**: Direct (가장 빠름)
-- **정확한 평가**: CodeSIM (가장 정확함)
-- **균형잡힌**: CoT (속도와 정확도 균형)
-- **고급 분석**: MapCoder (복잡한 문제)
-
-#### 3. 하드웨어 최적화
-- **단일 GPU**: tensor_parallel_size=1
-- **다중 GPU**: tensor_parallel_size=2 (또는 4)
-- **메모리 최적화**: gpu_memory_utilization=0.8
-- **배치 처리**: max_tokens=2048
-
 ## 📊 결과 분석
 
 ### 결과 파일 구조
@@ -421,75 +415,3 @@ results/
     ├── Results-ET.jsonl      # Execution Time 결과
     └── Summary-ET.txt        # Execution Time 요약
 ```
-
-### 결과 해석
-
-#### Pass@k 지표
-- **Pass@1**: 첫 번째 시도에서 통과한 비율
-- **Pass@10**: 10번 시도 중 통과한 비율
-- **Pass@100**: 100번 시도 중 통과한 비율
-
-#### 실행 시간 분석
-- **평균 실행 시간**: 모든 테스트 케이스의 평균
-- **최대 실행 시간**: 가장 오래 걸린 테스트 케이스
-- **메모리 사용량**: GPU 및 시스템 메모리 사용량
-
-## 🔮 향후 계획
-
-### 단기 계획 (1-3개월)
-- [ ] 더 많은 Qwen3 모델 지원
-- [ ] 새로운 프롬프팅 전략 추가
-- [ ] 성능 벤치마크 개선
-
-### 중기 계획 (3-6개월)
-- [ ] 웹 인터페이스 개발
-- [ ] 분산 평가 시스템 구축
-- [ ] 실시간 모니터링 대시보드
-
-### 장기 계획 (6개월+)
-- [ ] 클라우드 배포 지원
-- [ ] 자동 하이퍼파라미터 튜닝
-- [ ] 멀티 모달 평가 지원
-
-## 🤝 기여하기
-
-### 버그 리포트
-- GitHub Issues를 통해 버그를 리포트해주세요
-- 재현 가능한 최소한의 예제를 포함해주세요
-
-### 기능 제안
-- 새로운 기능이나 개선사항을 제안해주세요
-- 구체적인 사용 사례를 설명해주세요
-
-### 코드 기여
-- Fork 후 Pull Request를 보내주세요
-- 코드 스타일 가이드를 따라주세요
-
-## 📚 참고 자료
-
-### 공식 문서
-- [vLLM 공식 문서](https://docs.vllm.ai/)
-- [Qwen 모델 허브](https://huggingface.co/Qwen)
-- [Qwen3-Coder GitHub](https://github.com/QwenLM/Qwen3-Coder)
-
-### 관련 논문
-- [Qwen3 Technical Report](https://arxiv.org/abs/2505.09388)
-- [Qwen2.5-Coder Technical Report](https://arxiv.org/abs/2409.12186)
-
-### 커뮤니티
-- [Qwen Discord](https://discord.gg/qwen)
-- [Hugging Face Forums](https://discuss.huggingface.co/)
-
-## 📄 라이선스
-
-이 프로젝트는 MIT 라이선스 하에 배포됩니다. 자세한 내용은 [LICENSE](LICENSE) 파일을 참조하세요.
-
-## 🙏 감사의 말
-
-- [Qwen Team](https://github.com/QwenLM) - 훌륭한 모델들을 제공해주셔서 감사합니다
-- [vLLM Team](https://github.com/vllm-project/vllm) - 고성능 추론 엔진을 제공해주셔서 감사합니다
-- [Hugging Face](https://huggingface.co/) - 모델 허브와 도구들을 제공해주셔서 감사합니다
-
----
-
-**CodeGenerator**로 더 나은 코드 생성 AI를 만들어가요! 🚀✨
