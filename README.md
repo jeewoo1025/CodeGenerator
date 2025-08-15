@@ -71,18 +71,6 @@ python run_qwen_evaluation.py \
     --model Qwen3-0.6B \
     --dataset HumanEval \
     --strategy MapCoder
-
-    # CoT (Chain of Thought) 전략
-    python run_qwen_evaluation.py \
-        --model Qwen3-0.6B \
-        --dataset HumanEval \
-        --strategy CoT
-
-    # SelfPlanning 전략
-    python run_qwen_evaluation.py \
-        --model Qwen3-0.6B \
-        --dataset HumanEval \
-        --strategy SelfPlanning
 ```
 
 #### LiveCodeBench 데이터셋
@@ -232,41 +220,24 @@ python run_qwen_evaluation.py \
     --dataset HumanEval \
     --strategy SelfPlanning
 ```
-│   │   ├── OpenAI.py            # OpenAI 모델
-│   │   ├── Anthropic.py         # Anthropic 모델
-│   │   ├── VLLMModel.py         # vLLM 모델 (Qwen3 지원)
-│   │   ├── Gemini.py            # Google Gemini 모델
-│   │   └── ModelFactory.py      # 모델 팩토리
-│   ├── promptings/               # 프롬프팅 전략
-│   │   ├── Base.py              # 기본 전략 클래스
-│   │   ├── Direct.py            # Direct 전략
-│   │   ├── CodeSIM.py           # CodeSIM 전략
-│   │   ├── MapCoder.py          # MapCoder 전략
-│   │   └── PromptingFactory.py  # 전략 팩토리
-│   ├── datasets/                 # 데이터셋 로더
-│   │   ├── HumanEvalDataset.py  # HumanEval 데이터셋
-│   │   ├── LiveCodeBenchDataset.py # LiveCodeBench 데이터셋
-│   │   └── DatasetFactory.py    # 데이터셋 팩토리
+
+## 📁 프로젝트 구조
+
+```
+CodeGenerator/
+├── src/                          # 소스 코드
+│   ├── main.py                   # 메인 실행 스크립트
+│   ├── constants/                # 상수 및 경로 정의
+│   ├── datasets/                 # 데이터셋 로더 및 변환
 │   ├── evaluations/              # 평가 로직
-│   │   ├── func_evaluate.py     # 함수 평가
-│   │   └── resource_limit.py    # 리소스 제한
-│   ├── constants/                # 상수 정의
-│   │   ├── qwen_models.py       # Qwen3 모델 설정
-│   │   └── paths.py             # 경로 상수
-│   ├── utils/                    # 유틸리티 함수
-│   │   ├── summary.py           # 결과 요약
-│   │   └── parse.py             # 파싱 유틸리티
+│   ├── models/                   # 모델 구현
+│   ├── promptings/               # 프롬프팅 전략
 │   ├── results/                  # 결과 처리
-│   │   └── Results.py           # 결과 클래스
-│   └── main.py                  # 메인 실행 스크립트
+│   └── utils/                    # 유틸리티 함수
 ├── data/                         # 데이터셋 파일들
-│   ├── HumanEval/               # HumanEval 데이터
-│   ├── MBPP/                    # MBPP 데이터
-│   ├── LiveCodeBench/           # LiveCodeBench 데이터
-│   └── APPS/                    # APPS 데이터
 ├── results/                      # 평가 결과 (자동 생성)
-├── run_qwen_evaluation.py       # Qwen3 모델 평가 통합 스크립트
-├── test_setup.py                # 설정 테스트 스크립트
+├── run_qwen_evaluation.py        # Qwen3 모델 평가 통합 스크립트
+├── test_setup.py                 # 설정 테스트 스크립트
 ├── requirements.txt              # Python 의존성
 └── README.md                     # 이 파일
 ```
