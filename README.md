@@ -274,6 +274,383 @@ python src/main.py --dataset APPS --strategy CodeSIM --model ChatGPT
 python src/main.py --dataset LiveCodeBench --strategy CodeSIM --model ChatGPT
 ```
 
+## 🔄 Dataset 실행 내부 프로세스
+
+### 1. 데이터셋 로딩 및 초기화 과정
+
+#### Dataset Factory 패턴을 통한 동적 생성
+```python
+# src/main.py에서 데이터셋 생성
+if DATASET.lower() in ["livecodebench", "lcb"] or DATASET.startswith("lcb_"):
+    # LiveCodeBench 특별 처리
+    version = args.lcb_version
+    strategy = PromptingFactory.get_prompting_class(STRATEGY)(
+        model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(...),
+        data=DatasetFactory.create_dataset(DATASET, release_version=version),
+        language=LANGUAGE,
+        pass_at_k=PASS_AT_K,
+        results=Results(RESULTS_PATH),
+        verbose=VERBOSE
+    )
+else:
+    # 일반 데이터셋 처리
+    strategy = PromptingFactory.get_prompting_class(STRATEGY)(
+        model=ModelFactory.get_model_class(MODEL_PROVIDER_NAME)(...),
+        data=DatasetFactory.create_dataset(DATASET),
+        language=LANGUAGE,
+        pass_at_k=PASS_AT_K,
+        results=Results(RESULTS_PATH),
+        verbose=VERBOSE
+    )
+```
+
+#### 데이터셋별 특화 처리
+```python
+# src/datasets/DatasetFactory.py
+class DatasetFactory:
+    @staticmethod
+    def create_dataset(dataset_name, **kwargs):
+        dataset_class = DatasetFactory.get_dataset_class(dataset_name)
+        
+        # LiveCodeBench: 버전별 릴리즈 지원
+        if dataset_name.lower() in ["livecodebench", "lcb"] or dataset_name.startswith("lcb_"):
+            if dataset_name.startswith("lcb_"):
+                version = dataset_name.replace("lcb_", "")
+            else:
+                version = kwargs.get('release_version', 'release_v6')
+            return dataset_class(release_version=version)
+        else:
+            return dataset_class(**kwargs)
+```
+
+### 2. 데이터셋 실행 워크플로우
+
+#### Step 1: 데이터 로딩 및 전처리
+```python
+# src/datasets/Dataset.py - 기본 데이터셋 클래스
+class Dataset(object):
+    def __init__(self, path: str):
+        self.path = path
+        self.data = None
+        self.id_key = ""
+        self.load()  # JSONL 파일에서 데이터 로드
+    
+    def load(self):
+        self.data = read_jsonl(self.path)  # JSONL 형식 데이터 파싱
+    
+    def __len__(self):
+        return len(self.data)  # 데이터셋 크기 반환
+    
+    def __getitem__(self, idx):
+        return self.data[idx]  # 인덱스 기반 데이터 접근
+```
+
+#### Step 2: 문제별 프롬프트 생성
+```python
+# src/datasets/HumanEvalDataset.py - HumanEval 특화 처리
+class HumanDataset(Dataset):
+    def __init__(self, path: str = HUMAN_DATA_PATH):
+        super().__init__(path)
+        self.id_key = "task_id"  # 고유 식별자 키 설정
+    
+    @staticmethod
+    def get_prompt(item):
+        # 프롬프트 또는 텍스트 필드에서 문제 설명 추출
+        if "prompt" in item:
+            return f"{item['prompt'].strip()}"
+        elif "text" in item:
+            return f"{item['text'].strip()}"
+        else:
+            raise Exception("No prompt or text in item")
+```
+
+#### Step 3: 코드 실행 및 평가
+```python
+# src/datasets/HumanEvalDataset.py - 평가 로직
+def evaluate_sample_io(self, item: dict, cur_imp: str, language: str):
+    # 샘플 I/O 테스트 실행
+    return evaluate_io(
+        sample_io=item["sample_io"],  # 테스트 케이스
+        completion=cur_imp,           # 생성된 코드
+    )
+
+def evaluate_additional_io(self, id: int, io: List[str], cur_imp: str, language: str):
+    # 추가 I/O 테스트 실행
+    if len(io) == 0:
+        return True, ""
+    
+    return evaluate_io(
+        sample_io=io,      # 추가 테스트 케이스
+        completion=cur_imp, # 생성된 코드
+    )
+```
+
+### 3. 실행 결과 저장 및 분석
+
+#### 결과 파일 구조
+```
+results/
+└── {DATASET}/                    # 데이터셋별 분류
+    └── {STRATEGY}/              # 전략별 분류
+        └── {MODEL_NAME}/        # 모델별 분류
+            └── {LANGUAGE}-{TEMPERATURE}-{TOP_P}-{PASS_AT_K}/
+                ├── Run-{run_no}/ # 실행 번호별 분류
+                │   ├── Results.jsonl          # 기본 실행 결과
+                │   ├── Summary.txt            # 통계 요약
+                │   ├── Log.txt                # 상세 실행 로그
+                │   ├── Results-ET.jsonl       # Execution Time 결과
+                │   ├── Results-EP.jsonl       # Execution Pass 결과
+                │   └── Results-LCB.jsonl      # LiveCodeBench 특화 결과
+```
+
+#### 실행 로그 및 모니터링
+```python
+# src/main.py - 실행 로그 관리
+if STORE_LOG_IN_FILE.lower() == 'yes':
+    sys.stdout = open(LOGS_PATH, mode="a", encoding="utf-8")
+
+# 실행 시작/종료 로그
+if CONTINUE == "no" and VERBOSE >= VERBOSE_MINIMAL:
+    print(f"""
+##################################################
+Experiment start {RUN_NAME}, Time: {datetime.now()}
+###################################################
+""")
+
+# 결과 요약 생성
+gen_summary(RESULTS_PATH, SUMMARY_PATH)
+```
+
+## 🎯 다른 Prompting 전략들의 구현 방식
+
+### 1. Chain-of-Thought (CoT) 전략
+
+#### 핵심 아이디어
+CoT는 **"Let's think step by step"** 접근법으로, 문제를 단계별로 분석하여 해결하는 방식입니다.
+
+#### 구현 구조 (`src/promptings/CoT.py`)
+```python
+class CoTStrategy(BaseStrategy):
+    def run_single_pass(self, data_row: dict):
+        # HumanEval 데이터셋 전용 프롬프트 템플릿
+        if type(self.data) == HumanDataset:
+            planning_prompt = """
+def encrypt(s):
+    '''
+    Create a function encrypt that takes a string as an argument and
+    returns a string encrypted with the alphabet being rotated. 
+    The alphabet should be rotated in a manner such that the letters 
+    shift down by two multiplied to two places.
+    For example:
+    encrypt('hi') returns 'lm'
+    encrypt('asdfghjkl') returns 'ewhjklnop'
+    encrypt('gf') returns 'kj'
+    encrypt('et') returns 'ix'
+    '''
+    # Let's think step by step.
+
+    # Define the alphabet as a string
+    d = 'abcdefghijklmnopqrstuvwxyz'
+    
+    # Initialize an empty string to store the encrypted result
+    out = ''
+    
+    # Iterate through each character in the input string
+    for c in s:
+        # Check if the character is a letter in the alphabet
+        if c in c:
+            # Find the index of the current letter in the alphabet
+            index = d.index(c)
+            
+            # Rotate the alphabet by two multiplied to two places
+            # Use modulo 26 to handle wrapping around the alphabet
+            rotated_index = (index + 2 * 2) % 26
+            
+            # Append the encrypted letter to the result string
+            out += d[rotated_index]
+        else:
+            # If the character is not a letter, append it unchanged
+            out += c
+    
+    # Return the final encrypted string
+    return out
+    """
+```
+
+**CoT의 특징:**
+- **Step-by-step Reasoning**: 각 단계를 명시적으로 설명
+- **Exemplar-based Learning**: 예제 문제와 해결 과정을 포함
+- **Direct Code Generation**: 사고 과정과 함께 코드를 직접 생성
+- **No Iteration**: 단일 패스로 해결 (반복 없음)
+
+### 2. MapCoder 전략
+
+#### 핵심 아이디어
+MapCoder는 **"multiple ungrounded exemplars"**를 사용하여 문제를 해결하는 방식으로, 여러 예제를 참고하여 매핑 기반으로 코드를 생성합니다.
+
+#### 구현 구조 (`src/promptings/MapCoder.py`)
+```python
+class MapCoder(BaseStrategy):
+    def __init__(self, k: int = 3, t: int = 5, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.k = k  # exemplar 개수
+        self.t = t  # 시도 횟수
+
+    def xml_to_dict(self, element):
+        # XML 응답을 딕셔너리로 파싱
+        result = {}
+        for child in element:
+            if child:
+                child_data = self.xml_to_dict(child)
+                if child.tag in result:
+                    if isinstance(result[child.tag], list):
+                        result[child.tag].append(child_data)
+                    else:
+                        result[child.tag] = [result[child.tag], child_data]
+                else:
+                    result[child.tag] = child_data
+            else:
+                result[child.tag] = child.text
+        return result
+
+    def parse_xml(self, response: str) -> dict:
+        # XML 응답 파싱 및 구조화
+        if '```xml' in response:
+            response = response.replace('```xml', '')
+        if '```' in response:
+            response = response.replace('```', '')
+
+        try:
+            root = ET.fromstring(response)
+        except:
+            try:
+                root = ET.fromstring('<root>\n' + response + '\n</root>')
+            except:
+                root = ET.fromstring('<root>\n' + response)
+        return self.xml_to_dict(root)
+```
+
+**MapCoder의 특징:**
+- **Multiple Exemplars**: k개의 예제를 동시에 참고
+- **XML-based Parsing**: 구조화된 응답을 XML로 파싱
+- **Iterative Refinement**: t번의 시도를 통한 점진적 개선
+- **No Simulation**: 계획 검증 없이 직접 코드 생성
+
+### 3. Self-Planning 전략
+
+#### 핵심 아이디어
+Self-Planning은 **"자기 계획 수립"**을 통해 문제를 해결하는 방식으로, LLM이 스스로 계획을 세우고 실행합니다.
+
+#### 구현 구조 (`src/promptings/SelfPlanning.py`)
+```python
+class SelfPlanningStrategy(BaseStrategy):
+    def run_single_pass(self, data_row: dict):
+        # HumanEval 데이터셋 전용 계획 프롬프트
+        if type(self.data) == HumanDataset:
+            planning_prompt = """
+def encrypt(s):
+    '''
+    Create a function encrypt that takes a string as an argument and returns a string encrypted with the alphabet being rotated. The alphabet should be rotated in a manner such that the letters shift down by two multiplied to two places.
+    For example:
+    encrypt('hi') returns 'lm'
+    encrypt('asdfghjkl') returns 'ewhjklnop'
+    encrypt('gf') returns 'kj'
+    encrypt('et') returns 'ix'
+    Let's think step by step.
+    1. Create a alphabet, bias two places multiplied by two.
+    2. Loop the input, find the latter bias letter in alphabet.
+    3. Return result.
+    ''' 
+
+def check_if_last_char_is_a_letter(txt):
+    ''' 
+    Create a function that returns True if the last character of a given string is an alphabetical character and is not a part of a word, and False otherwise. Note: 'word' is a group of characters separated by space.
+    Examples:
+    check_if_last_char_is_a_letter('apple pie') → False
+    check_if_last_char_is_a_letter('apple pi e') → True
+    check_if_last_char_is_a_letter('apple pi e ') → False
+    check_if_last_char_is_a_letter('') → False
+    Let's think step by step.
+    1. If the string is empty, return False.
+    2. If the string does not end with a alphabetical character, return False.
+    3. Split the given string into a list of words.
+    4. Check if the length of the last word is equal to 1.
+    '''
+    """
+```
+
+**Self-Planning의 특징:**
+- **Self-Generated Plans**: LLM이 스스로 계획을 수립
+- **Step-by-step Instructions**: 명확한 단계별 지시사항
+- **Exemplar Integration**: 예제와 계획을 통합하여 제공
+- **No External Validation**: 외부 검증 없이 자체 계획 실행
+
+### 4. Direct 전략
+
+#### 핵심 아이디어
+Direct는 **"직접적인 코드 생성"** 방식으로, 복잡한 프롬프트 없이 문제 설명만으로 코드를 생성합니다.
+
+#### 구현 구조 (`src/promptings/Direct.py`)
+```python
+class DirectStrategy(BaseStrategy):
+    def run_single_pass(self, data_row: dict):
+        # 가장 단순한 방식: 문제 설명만으로 코드 생성
+        prompt = self.data.get_prompt(data_row)
+        
+        # LLM에 직접 전달하여 코드 생성
+        response = self.gpt_chat([
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ])
+        
+        # 응답에서 코드 추출
+        code = parse_response(response)
+        return code
+```
+
+**Direct의 특징:**
+- **Minimal Prompting**: 최소한의 프롬프트만 사용
+- **No Planning**: 계획 수립 과정 없음
+- **No Exemplars**: 예제 참고 없음
+- **Fastest Execution**: 가장 빠른 실행 속도
+
+### 5. 전략별 성능 비교 및 선택 가이드
+
+#### 복잡도 vs 성능 트레이드오프
+```
+복잡도: Direct < CoT < SelfPlanning < MapCoder < CodeSIM
+성능:   Direct < CoT < SelfPlanning < MapCoder < CodeSIM
+속도:   Direct > CoT > SelfPlanning > MapCoder > CodeSIM
+```
+
+#### 데이터셋별 권장 전략
+- **HumanEval/MBPP**: CodeSIM (높은 정확도 요구)
+- **APPS/CodeContests**: CodeSIM 또는 MapCoder (복잡한 문제)
+- **LiveCodeBench**: CodeSIM (경쟁 프로그래밍 최적화)
+- **빠른 프로토타이핑**: Direct 또는 CoT
+- **균형잡힌 접근**: SelfPlanning
+
+#### 전략 선택 기준
+```python
+# src/main.py에서 전략 선택
+STRATEGY = args.strategy  # 사용자가 선택한 전략
+
+# 전략별 특성에 따른 자동 최적화
+if STRATEGY == "CodeSIM":
+    # 계획 검증 및 디버깅 활성화
+    max_plan_try = 5
+    max_debug_try = 5
+elif STRATEGY == "MapCoder":
+    # exemplar 기반 접근
+    k = 3  # exemplar 개수
+    t = 5  # 시도 횟수
+elif STRATEGY == "Direct":
+    # 단순한 직접 생성
+    # 추가 옵션 없음
+```
+
 ### 고급 실행 옵션
 ```bash
 # 계획 시도 횟수 및 디버깅 시도 횟수 조정
