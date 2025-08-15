@@ -5,11 +5,10 @@ CodeGenerator는 다양한 대규모 언어 모델(LLM)을 사용하여 코드 �
 ## 🚀 주요 기능
 
 - **다양한 모델 지원**: OpenAI, Anthropic, Google, vLLM 등
-- **Qwen3 모델 지원**: Qwen3.5, Qwen3, Qwen3-Coder 계열 모델 (총 43개 모델)
-- **다양한 전략**: Direct, CoT, CodeSIM, MapCoder, SelfPlanning, Analogical 등
-- **다양한 데이터셋**: HumanEval, MBPP, LiveCodeBench, APPS, xCodeEval 등
+- **Qwen3 모델 지원**: Qwen3.5, Qwen3, Qwen3-Coder 계열 모델 
+- **Prompting Strategy**: Direct, CoT, CodeSIM, MapCoder, SelfPlanning, Analogical 등
+- **데이터셋**: HumanEval, MBPP, LiveCodeBench, APPS, xCodeEval 등
 - **실시간 평가**: 코드 실행 및 테스트 자동화
-- **크로스 플랫폼**: Windows, Linux, macOS 지원
 
 ## 📦 설치
 
@@ -135,7 +134,6 @@ python src/main.py \
 ## 🏗️ 지원 모델
 
 ### Qwen3 계열 (vLLM)
-아래 모델명은 실제 지원되는 모델명과 일치해야 하며, `src/constants/qwen_models.py` 기준입니다.
 
 #### Qwen3 시리즈
 - Qwen3-0.6B
@@ -175,8 +173,6 @@ python src/main.py \
 - **CodeSIMC**: CodeSIM Compact
 
 ## 📊 지원 데이터셋
-
-
 ### 1. Qwen3 모델 평가 (vLLM) - 권장
 
 #### 기본 사용법
